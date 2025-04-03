@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRO Crypto Signal</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #0a0e17;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 90%;
+            max-width: 800px;
+            height: 400px;
+            margin: 20px 0;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-bottom: 1px solid #1f2a3e;
+            border-left: 1px solid #1f2a3e;
+            overflow: hidden;
+            transition: opacity 0.5s;
+        }
+
+        .candle {
+            position: absolute;
+            width: 14px;
+            border-radius: 2px;
+            bottom: 0;
+            opacity: 0;
+            transform-origin: bottom;
+            box-shadow: 0 0 8px currentColor;
+            z-index: 1;
+        }
+
+        .candle-up {
+            background: linear-gradient(to top, #00c853, #5efc82);
+            border: 1px solid #5efc82;
+            color: rgba(94, 252, 130, 0.3);
+        }
+
+        .candle-down {
+            background: linear-gradient(to top, #d50000, #ff5252);
+            border: 1px solid #ff5252;
+            color: rgba(255, 82, 82, 0.3);
+        }
+
+        .wick {
+            position: absolute;
+            width: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .result {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0;
+            font-weight: 800;
+            opacity: 0;
+            transition: all 0.5s;
+            text-shadow: 0 0 25px currentColor;
+            pointer-events: none;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .show-result {
+            font-size: 72px;
+            opacity: 1;
+        }
+
+        .result-up {
+            color: #5efc82;
+            text-shadow: 0 0 25px rgba(94, 252, 130, 0.7);
+        }
+
+        .result-down {
+            color: #ff5252;
+            text-shadow: 0 0 25px rgba(255, 82, 82, 0.7);
+        }
+
+        .hide-chart {
+            opacity: 0;
+        }
+
+        .btn {
+            padding: 16px 50px;
+            background: linear-gradient(to right, #2962FF, #00c853);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 5px 25px rgba(41, 98, 255, 0.4);
+            margin-top: 40px;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to right, #00c853, #2962FF);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: -1;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(41, 98, 255, 0.6);
+        }
+
+        .btn:hover::before {
+            opacity: 1;
+        }
+
+        @keyframes candleRise {
+            0% { transform: scaleY(0); opacity: 0; }
+            60% { transform: scaleY(1.1); }
+            100% { transform: scaleY(1); opacity: 1; }
+        }
+
+        .pulse {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            z-index: 0;
+            opacity: 0;
+        }
+
+        .pulse-up {
+            background: radial-gradient(circle, rgba(94,252,130,0.2) 0%, rgba(94,252,130,0) 70%);
+        }
+
+        .pulse-down {
+            background: radial-gradient(circle, rgba(255,82,82,0.2) 0%, rgba(255,82,82,0) 70%);
+        }
+
+        .show-pulse {
+            animation: pulse 2s forwards;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+        }
+
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    <div class="chart-wrapper">
+        <div class="chart-container" id="chart"></div>
+        <div class="result" id="result"></div>
+        <div class="pulse" id="pulse"></div>
+    </div>
+    <button class="btn" onclick="startAnimation()">Generate Signal</button>
+
+    <script>
+        async function startAnimation() {
+            const chart = document.getElementById('chart');
+            const result = document.getElementById('result');
+            const pulse = document.getElementById('pulse');
+            const particles = document.getElementById('particles');
+            
+            // Reset
+            chart.innerHTML = '';
+            result.className = 'result';
+            pulse.className = 'pulse';
+            chart.classList.remove('hide-chart');
+            particles.innerHTML = '';
+
+            // Generate candle data
+            const candleCount = 12;
+            const containerHeight = chart.offsetHeight;
+            const minPosition = 30;
+            const maxPosition = containerHeight - 30;
+            let currentClose = containerHeight / 2;
+            let currentOpen = currentClose;
+
+            const candles = [];
+            for(let i = 0; i < candleCount; i++) {
+                const height = 40 + Math.random() * 80;
+                const isUp = Math.random() > 0.5;
+                
+                currentClose = isUp 
+                    ? Math.max(minPosition, currentOpen - height)
+                    : Math.min(maxPosition, currentOpen + height);
+
+                candles.push({
+                    height: height,
+                    isUp: isUp,
+                    position: currentClose,
+                    topWick: 15 + Math.random() * 25,
+                    bottomWick: 15 + Math.random() * 25,
+                    xPos: 20 + i * 24
+                });
+                
+                currentOpen = currentClose;
+            }
+
+            // Determine final direction
+            const lastCandle = candles[candles.length-1];
+            const prevCandle = candles[candles.length-2];
+            const isFinalUp = lastCandle.position < prevCandle.position;
+
+            // Animate candles
+            for(const [index, candle] of candles.entries()) {
+                const candleElement = createCandle(candle);
+                chart.appendChild(candleElement);
+                await animateCandle(candleElement, index);
+            }
+
+            // Show result with effects
+            setTimeout(() => {
+                chart.classList.add('hide-chart');
+                result.textContent = isFinalUp ? 'UP' : 'DOWN';
+                result.classList.add(isFinalUp ? 'result-up' : 'result-down');
+                result.classList.add('show-result');
+                
+                // Add pulse effect
+                pulse.classList.add(isFinalUp ? 'pulse-up' : 'pulse-down');
+                pulse.classList.add('show-pulse');
+                
+                // Add particles
+                createParticles(isFinalUp);
+            }, 500);
+        }
+
+        function createCandle(candle) {
+            const element = document.createElement('div');
+            element.className = `candle ${candle.isUp ? 'candle-up' : 'candle-down'}`;
+            element.style.height = `${candle.height}px`;
+            element.style.bottom = `${candle.position}px`;
+            element.style.left = `${candle.xPos}px`;
+
+            // Wicks
+            const topWick = document.createElement('div');
+            topWick.className = 'wick';
+            topWick.style.height = `${candle.topWick}px`;
+            topWick.style.bottom = '100%';
+            topWick.style.background = candle.isUp ? '#5efc82' : '#ff5252';
+
+            const bottomWick = document.createElement('div');
+            bottomWick.className = 'wick';
+            bottomWick.style.height = `${candle.bottomWick}px`;
+            bottomWick.style.top = '100%';
+            bottomWick.style.background = candle.isUp ? '#5efc82' : '#ff5252';
+
+            element.appendChild(topWick);
+            element.appendChild(bottomWick);
+            
+            return element;
+        }
+
+        function createParticles(isUp) {
+            const particles = document.getElementById('particles');
+            const color = isUp ? '#5efc82' : '#ff5252';
+            
+            for(let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.width = `${Math.random() * 6 + 2}px`;
+                particle.style.height = particle.style.width;
+                particle.style.background = color;
+                particle.style.left = `${Math.random() * 100}%`;
+                particle.style.top = `${Math.random() * 100}%`;
+                particle.style.opacity = '0';
+                
+                particles.appendChild(particle);
+                
+                // Animate particles
+                setTimeout(() => {
+                    particle.style.transition = `all ${Math.random() * 2 + 1}s ease-out`;
+                    particle.style.opacity = '0.6';
+                    particle.style.transform = `translate(${(Math.random() - 0.5) * 200}px, ${(Math.random() - 0.5) * 200}px)`;
+                    
+                    setTimeout(() => {
+                        particle.style.opacity = '0';
+                    }, 1000);
+                }, Math.random() * 500);
+            }
+        }
+
+        async function animateCandle(element, index) {
+            return new Promise(resolve => {
+                element.style.animation = `candleRise 0.4s ${index * 0.1}s forwards`;
+                setTimeout(resolve, 100);
+            });
+        }
+    </script>
+</body>
+</html>
